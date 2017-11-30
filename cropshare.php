@@ -16,11 +16,7 @@ class CropShare
 
     public function __construct()
     {
-        // Enqueue the js and css needed for this plugin
-        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
-        // Grab the image and post info
-        add_filter('image_editor_save_pre', [$this, 'cropshare_image_editor_save_pre'], 10, 2);
-
+        $this->add_actions();
     }
 
     public function cropshare_image_editor_save_pre($image, $post_id)
@@ -34,7 +30,17 @@ class CropShare
 
     public function enqueue_assets()
     {
-        wp_enqueue_script( 'cropshare', plugin_dir_url( __FILE__ ) . 'js/cropshare.js' );
+       wp_register_script('cropshare', plugin_dir_url( __FILE__ ) . 'js/cropshare.js','','1.1', true);
+       wp_enqueue_script( 'cropshare');
+    }
+
+    /** PROTECTED methods **/
+    protected function add_actions()
+    {
+        // Enqueue the js and css needed for this plugin
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+        // Grab the image and post info
+        add_filter('image_editor_save_pre', [$this, 'cropshare_image_editor_save_pre'], 10, 2);
     }
 
     /**
