@@ -2,7 +2,8 @@ var DOMObserver = {
     done: false,
     observer: null,
     callback: null,
-    className: '',
+    onFoundClassName: '',
+    onRemovedClassName: '',
     config: {
         attributes: true,
         childList: true,
@@ -18,8 +19,19 @@ var DOMObserver = {
         var self = this;
         this.observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
+                var removedNodes = Array.from(mutation.removedNodes);
+                if (removedNodes.length > 0) {
+                    for (var index in removedNodes) {
+                        var node = removedNodes[index];
+                        if (node.className !== undefined) {
+                            if (node.className.indexOf(self.onRemovedClassName) !== -1) {
+                                self.done = false;
+                            }
+                        }
+                    }
+                }
                 if (mutation.attributeName == 'class' && !self.done) {
-                    if (mutation.target.className.indexOf(self.className) !== -1) {
+                    if (mutation.target.className.indexOf(self.onFoundClassName) !== -1) {
                         self.callback();
                         self.done = true;
                     }
@@ -34,12 +46,15 @@ jQuery('.imgedit-menu').ready(function ($) {
     var domObserver = Object.create(DOMObserver);
     domObserver.init({
         done: false,
-        className: 'imgareaselect-outer',
+        onFoundClassName: 'imgareaselect-outer',
+        onRemovedClassName: 'image-editor',
         callback: function() {
             var foo = 'bar!';
             $('.imgedit-menu').append('<button type="button" id="cropshare" class="fa a-share-square-o"><span class="screen-reader-text">Crop and download</span></button>');
             $('#cropshare').off().on('click', function() {
-                alert('Yessssss!!!');
+                var $imageClone = $('#image-preview-4').clone();
+                //imageEdit.crop(6, 'dd9a491102', this);
+                //$('#cropshare').html($imageClone);
             })
         }
     });
