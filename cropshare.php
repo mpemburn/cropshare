@@ -30,6 +30,8 @@ class CropShare
 
     public function enqueue_assets()
     {
+        wp_enqueue_style('fontawesome', 'https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
+        wp_enqueue_style('cropshare', plugin_dir_url(__FILE__) . 'css/cropshare.css');
         wp_register_script('cropshare', plugin_dir_url(__FILE__) . 'js/cropshare.js', '', '1.1', true);
         wp_enqueue_script('cropshare');
     }
