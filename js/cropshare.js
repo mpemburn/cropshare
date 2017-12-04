@@ -1,9 +1,9 @@
 var DOMObserver = {
     done: false,
     observer: null,
-    foundCallback: null,
-    doneCallback: null,
-    onFoundClassName: '',
+    nodeAddedCallback: null,
+    nodeRemovedCallback: null,
+    onAddedClassName: '',
     onRemovedClassName: '',
     config: {
         attributes: true,
@@ -26,15 +26,15 @@ var DOMObserver = {
                         var node = removedNodes[index];
                         if (node.className !== undefined) {
                             if (node.className.indexOf(self.onRemovedClassName) !== -1) {
-                                self.doneCallback();
+                                self.nodeRemovedCallback();
                                 self.done = false;
                             }
                         }
                     }
                 }
                 if (mutation.attributeName == 'class' && !self.done) {
-                    if (mutation.target.className.indexOf(self.onFoundClassName) !== -1) {
-                        self.foundCallback();
+                    if (mutation.target.className.indexOf(self.onAddedClassName) !== -1) {
+                        self.nodeAddedCallback();
                         self.done = true;
                     }
                 }
@@ -50,7 +50,7 @@ var CropShare = {
         $.extend(this, options);
     },
     createButton: function() {
-        $('.imgedit-menu').append('<button type="button" id="cropshare" class="button"><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
+        $('.imgedit-menu').append('<button type="button" id="cropshare" class="button" disabled><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
         this._setListener();
     },
     onSelected: function() {
@@ -59,7 +59,8 @@ var CropShare = {
         clearInterval(this.selectListener);
     },
     _listenForSelect: function() {
-        var foo = 'bark';
+        var imageSelection = $('[id^=imgedit-selection-]').val();
+        $('#cropshare').prop('disabled', (imageSelection == ''))
     },
     _setListener: function() {
         $('#cropshare').off().on('click', function() {
@@ -88,7 +89,7 @@ var CropShare = {
                 }
             });
         })
-        this.selectListener = setInterval(this._listenForSelect, 500);
+        this.selectListener = setInterval(this._listenForSelect, 100);
     }
 };
 
@@ -97,12 +98,12 @@ jQuery('.imgedit-menu').ready(function ($) {
     var cropShare = Object.create(CropShare);
     domObserver.init({
         done: false,
-        onFoundClassName: 'imgareaselect-outer',
+        onAddedClassName: 'imgareaselect-outer',
         onRemovedClassName: 'image-editor',
-        foundCallback: function() {
+        nodeAddedCallback: function() {
             cropShare.createButton();
         },
-        doneCallback: function() {
+        nodeRemovedCallback: function() {
             cropShare.onDone();
         }
     });
