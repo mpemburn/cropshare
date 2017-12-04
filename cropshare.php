@@ -30,31 +30,95 @@ class CropShare
 
     public function enqueue_assets()
     {
-       wp_register_script('cropshare', plugin_dir_url( __FILE__ ) . 'js/cropshare.js','','1.1', true);
-       wp_enqueue_script( 'cropshare');
+        wp_register_script('cropshare', plugin_dir_url(__FILE__) . 'js/cropshare.js', '', '1.1', true);
+        wp_enqueue_script('cropshare');
     }
 
-    public function handle_cropshare()
+    public function handle_cropshare_ajax()
     {
+        $post_id = $_REQUEST['post_id'];
+        $selection = json_decode(stripslashes($_REQUEST['selection']));
+        $image_width = $_REQUEST['width'];
+        $image_height = $_REQUEST['height'];
+
+        $image_path = $this->get_image_path_from_url($post_id);
+        if (!is_null($image_path)) {
+            $image = $this->create_image($image_path);
+            if (!is_null($image)) {
+                $this->save_cropped_image($image, $selection, $image_width, $image_height);
+            }
+        }
+
+        $return = array(
+            'message' => 'Saved'
+        );
+
+        wp_send_json($return);
+
+        die();
 
     }
 
     /** PROTECTED methods **/
+    /**
+     * Add WordPress actions and filters
+     */
     protected function add_actions()
     {
         // Enqueue the js and css needed for this plugin
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
 
         // Set up AJAX handler
-        add_action('wp_ajax_handle_cropshare', [$this, 'handle_cropshare']);
+        add_action('wp_ajax_handle_cropshare_ajax', [$this, 'handle_cropshare_ajax']);
 
         // Grab the image and post info
         add_filter('image_editor_save_pre', [$this, 'cropshare_image_editor_save_pre'], 10, 2);
     }
 
     /**
+     * @param $image_url
+     * @return null|resource
+     */
+    protected function create_image($image_url)
+    {
+        $ext = pathinfo($image_url, PATHINFO_EXTENSION);
+        $image_path = $this->get_image_from_url($image_url);
+
+        if (!file_exists($image_path)) {
+            return null;
+        }
+        switch ($ext) {
+            case 'gif':
+                $image = imagecreatefromgif($image_path);
+                break;
+            case 'jpg':
+            case 'jpeg':
+                $image = imagecreatefromjpeg($image_path);
+                break;
+            case 'png':
+                $image = imagecreatefrompng($image_path);
+                break;
+            default:
+                return null;
+        }
+
+        return $image;
+    }
+
+    /**
+     * @param $post_id
+     * @return string|null
+     */
+    protected function get_image_path_from_url($post_id)
+    {
+        $image_info = wp_get_attachment_image_src($post_id, '');
+
+        return (is_array($image_info)) ? $image_info[0] : null;
+    }
+
+    /**
      * @param $image
-     * @return null|string
+     * @return string|null
      */
     protected function get_image_url($image)
     {
@@ -72,6 +136,131 @@ class CropShare
         }
 
         return $image_url;
+    }
+
+    protected function get_image_from_url($image_url)
+    {
+        $parsed = parse_url($image_url);
+
+        $uploads = wp_upload_dir();
+
+        if (is_array($parsed) && is_array($uploads)) {
+            $parsed_parts = explode('/', $parsed['path']);
+            $upload_parts = explode('/', $uploads['basedir']);
+            $file_path = implode('/', array_diff($parsed_parts, $upload_parts));
+            $file_path = $uploads['basedir'] . '/' . $file_path;
+        }
+
+        return $file_path;
+    }
+
+    protected function save_cropped_image($origin_image, $selection, $origin_width, $origin_height)
+    {
+        $uploads = wp_upload_dir();
+        if (is_array($uploads)) {
+            $dest_path = $uploads['basedir'] . '/this_worked.png';
+        }
+        $dest_x = $selection->x;
+        $dest_y = $selection->y;
+        $dest_width = $selection->w;
+        $dest_height = $selection->h;
+        $dest_image = imagecreatetruecolor($origin_width, $origin_height);
+        if (imagecopyresampled($dest_image, $origin_image, 0, 0, $dest_x, $dest_y, $origin_width, $origin_height, $origin_width, $origin_height)) {
+            if (imagepng($dest_image, $dest_path)) {
+                imagedestroy($dest_image);
+            }
+        }
+
+    }
+
+    protected function imagecreatefrombmp($p_sFile)
+    {
+        //    Load the image into a string
+        $file = fopen($p_sFile, "rb");
+        $read = fread($file, 10);
+        while (!feof($file) && ($read <> ""))
+            $read .= fread($file, 1024);
+
+        $temp = unpack("H*", $read);
+        $hex = $temp[1];
+        $header = substr($hex, 0, 108);
+
+        //    Process the header
+        //    Structure: http://www.fastgraph.com/help/bmp_header_format.html
+        if (substr($header, 0, 4) == "424d") {
+            //    Cut it in parts of 2 bytes
+            $header_parts = str_split($header, 2);
+
+            //    Get the width        4 bytes
+            $width = hexdec($header_parts[19] . $header_parts[18]);
+
+            //    Get the height        4 bytes
+            $height = hexdec($header_parts[23] . $header_parts[22]);
+
+            //    Unset the header params
+            unset($header_parts);
+        }
+
+        //    Define starting X and Y
+        $x = 0;
+        $y = 1;
+
+        //    Create newimage
+        $image = imagecreatetruecolor($width, $height);
+
+        //    Grab the body from the image
+        $body = substr($hex, 108);
+
+        //    Calculate if padding at the end-line is needed
+        //    Divided by two to keep overview.
+        //    1 byte = 2 HEX-chars
+        $body_size = (strlen($body) / 2);
+        $header_size = ($width * $height);
+
+        //    Use end-line padding? Only when needed
+        $usePadding = ($body_size > ($header_size * 3) + 4);
+
+        //    Using a for-loop with index-calculation instaid of str_split to avoid large memory consumption
+        //    Calculate the next DWORD-position in the body
+        for ($i = 0; $i < $body_size; $i += 3) {
+            //    Calculate line-ending and padding
+            if ($x >= $width) {
+                //    If padding needed, ignore image-padding
+                //    Shift i to the ending of the current 32-bit-block
+                if ($usePadding)
+                    $i += $width % 4;
+
+                //    Reset horizontal position
+                $x = 0;
+
+                //    Raise the height-position (bottom-up)
+                $y++;
+
+                //    Reached the image-height? Break the for-loop
+                if ($y > $height)
+                    break;
+            }
+
+            //    Calculation of the RGB-pixel (defined as BGR in image-data)
+            //    Define $i_pos as absolute position in the body
+            $i_pos = $i * 2;
+            $r = hexdec($body[$i_pos + 4] . $body[$i_pos + 5]);
+            $g = hexdec($body[$i_pos + 2] . $body[$i_pos + 3]);
+            $b = hexdec($body[$i_pos] . $body[$i_pos + 1]);
+
+            //    Calculate and draw the pixel
+            $color = imagecolorallocate($image, $r, $g, $b);
+            imagesetpixel($image, $x, $height - $y, $color);
+
+            //    Raise the horizontal position
+            $x++;
+        }
+
+        //    Unset the body / free the memory
+        unset($body);
+
+        //    Return image-object
+        return $image;
     }
 }
 

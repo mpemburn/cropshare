@@ -52,9 +52,33 @@ jQuery('.imgedit-menu').ready(function ($) {
             var foo = 'bar!';
             $('.imgedit-menu').append('<button type="button" id="cropshare" class="fa a-share-square-o"><span class="screen-reader-text">Crop and download</span></button>');
             $('#cropshare').off().on('click', function() {
-                var $imageClone = $('#image-preview-4').clone();
+                var $imageEditor = $('[id^=image-editor-]');
+                var imageEditorId = $imageEditor.attr('id');
+                var postId = imageEditorId.match(/\d+/g, '')[0];
+                var imageSelection = $('[id^=imgedit-selection-]').val()
+                var imageWidth = $('[id^=imgedit-sel-width-]').val()
+                var imageHeight = $('[id^=imgedit-sel-height-]').val()
+                //var $imageClone = $('#image-preview-4').clone();
                 //imageEdit.crop(6, 'dd9a491102', this);
                 //$('#cropshare').html($imageClone);
+                jQuery.ajax({
+                    type : "post",
+                    dataType : "json",
+                    url : ajaxurl,
+                    data : {
+                        action: 'handle_cropshare_ajax',
+                        post_id: postId,
+                        selection: imageSelection,
+                        width: imageWidth,
+                        height: imageHeight,
+                    },
+                    success: function(response) {
+                        var foo = 'bar';
+                    },
+                    error: function(response) {
+                        console.log(response);
+                    }
+                });
             })
         }
     });
