@@ -13,7 +13,7 @@ var DOMObserver = {
     },
     targetNode: document.body,
     init: function(options) {
-        $.extend(this, options);
+        jQuery.extend(this, options);
         this.observe()
     },
     observe: function() {
@@ -51,14 +51,14 @@ var CropShare = {
         height: null
     },
     init: function(options) {
-        $.extend(this, options);
+        jQuery.extend(this, options);
     },
     onLoaded: function() {
         this._createButton();
-        this._getImageSize($('[id^=image-preview-]'));
+        this._getImageSize(jQuery('[id^=image-preview-]'));
     },
     _createButton: function() {
-        $('.imgedit-menu').append('<button type="button" id="cropshare" class="button" disabled><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
+        jQuery('.imgedit-menu').append('<button type="button" id="cropshare" class="button" disabled><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
         this._setListener();
     },
     onSelected: function() {
@@ -76,18 +76,18 @@ var CropShare = {
         image.src = $img.attr('src');
     },
     _listenForSelect: function() {
-        var imageSelection = $('[id^=imgedit-selection-]').val();
-        $('#cropshare').prop('disabled', (imageSelection == ''))
+        var imageSelection = jQuery('[id^=imgedit-selection-]').val();
+        jQuery('#cropshare').prop('disabled', (imageSelection == ''))
     },
     _setListener: function() {
         var self = this;
-        $('#cropshare').off().on('click', function() {
-            var $imageEditor = $('[id^=image-editor-]');
+        jQuery('#cropshare').off().on('click', function() {
+            var $imageEditor = jQuery('[id^=image-editor-]');
             var imageEditorId = $imageEditor.attr('id');
             var postId = imageEditorId.match(/\d+/g, '')[0];
-            var imageSelection = $('[id^=imgedit-selection-]').val()
-            var imageWidth = $('[id^=imgedit-sel-width-]').val()
-            var imageHeight = $('[id^=imgedit-sel-height-]').val()
+            var imageSelection = jQuery('[id^=imgedit-selection-]').val()
+            var imageWidth = jQuery('[id^=imgedit-sel-width-]').val()
+            var imageHeight = jQuery('[id^=imgedit-sel-height-]').val()
             jQuery.ajax({
                 type : "post",
                 dataType : "json",

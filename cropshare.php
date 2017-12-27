@@ -167,7 +167,8 @@ class CropShare
     protected function saveCroppedImage($originImage, $previewSize, $selection, $originWidth, $originHeight)
     {
         $image = new Imagick($originImage);
-        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originWidth, $originHeight);
+        $originalDimensions = $image->getImageGeometry();
+        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originalDimensions['width'], $originalDimensions['height']);
         $image->cropImage($originWidth, $originHeight, $selection->x, $selection->y);
 
         $uploads = wp_upload_dir();
