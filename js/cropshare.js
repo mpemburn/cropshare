@@ -46,10 +46,18 @@ var DOMObserver = {
 
 var CropShare = {
     selectListener: null,
+    imageSize: {
+        width: null,
+        height: null
+    },
     init: function(options) {
         $.extend(this, options);
     },
-    createButton: function() {
+    onLoaded: function() {
+        this._createButton();
+        this._getImageSize($('[id^=image-preview-]'));
+    },
+    _createButton: function() {
         $('.imgedit-menu').append('<button type="button" id="cropshare" class="button" disabled><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
         this._setListener();
     },
@@ -58,11 +66,21 @@ var CropShare = {
     onDone: function() {
         clearInterval(this.selectListener);
     },
+    _getImageSize: function($img) {
+        var self = this;
+        var image = new Image();
+        image.onload = function() {
+            self.imageSize.width = this.width;
+            self.imageSize.height = this.height;
+        }
+        image.src = $img.attr('src');
+    },
     _listenForSelect: function() {
         var imageSelection = $('[id^=imgedit-selection-]').val();
         $('#cropshare').prop('disabled', (imageSelection == ''))
     },
     _setListener: function() {
+        var self = this;
         $('#cropshare').off().on('click', function() {
             var $imageEditor = $('[id^=image-editor-]');
             var imageEditorId = $imageEditor.attr('id');
@@ -80,6 +98,7 @@ var CropShare = {
                     selection: imageSelection,
                     width: imageWidth,
                     height: imageHeight,
+                    originalSize: self.imageSize
                 },
                 success: function(response) {
                     console.log(response);
@@ -101,7 +120,7 @@ jQuery('.imgedit-menu').ready(function ($) {
         onAddedClassName: 'imgareaselect-outer',
         onRemovedClassName: 'image-editor',
         nodeAddedCallback: function() {
-            cropShare.createButton();
+            cropShare.onLoaded();
         },
         nodeRemovedCallback: function() {
             cropShare.onDone();
