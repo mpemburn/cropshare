@@ -1,18 +1,24 @@
 <?php
 
 /*
-Plugin Name: CropShare Plugin
-Description: Crop images to size and save them to your local disk
-Version: 1.0 Alpha
-Author: Mark Pemburn
-Author URI: http://www.pemburnia.com/
+ * @wordpress-plugin
+ * Plugin Name: CropShare Plugin
+ * Description: Crop images to size and save them to your local disk
+ * Version: 1.0 Alpha
+ * Author: Mark Pemburn
+ * Author URI: http://www.pemburnia.com/
 */
+
+require_once __DIR__ . '/phpcrop.php';
+//use Plugins\Cropshare\PHPCrop;
 
 class CropShare
 {
-    protected $wp_image;
-    protected $post_id;
-    protected $image_url;
+    protected $useImageMagick;
+
+    protected $wpImage;
+    protected $postId;
+    protected $imageUrl;
 
     public static function register()
     {
@@ -22,17 +28,26 @@ class CropShare
 
     private function __construct()
     {
+        $this->useImageMagick = class_exists('Imagick');
     }
 
-    public function cropshareImageEditorSavePre($image, $post_id)
+    /**
+     * @param $image
+     * @param $postId
+     * @return mixed
+     */
+    public function cropshareImageEditorSavePre($image, $postId)
     {
-        $this->wp_image = $image;
-        $this->post_id = $post_id;
-        $this->image_url = $this->getImageUrl($image);
+        $this->wpImage = $image;
+        $this->postId = $postId;
+        $this->imageUrl = $this->getImageUrl($image);
 
         return $image;
     }
 
+    /**
+     *
+     */
     public function enqueueAssets()
     {
         wp_enqueue_style('fontawesome', 'https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
@@ -41,21 +56,20 @@ class CropShare
         wp_enqueue_script('cropshare');
     }
 
+    /**
+     *
+     */
     public function handleCropshareAjax()
     {
-        $post_id = $_REQUEST['post_id'];
+        $postId = $_REQUEST['post_id'];
         $previewSize = (object) $_REQUEST['originalSize'];
+        $magnification = $_REQUEST['magnification'];
         $selection = json_decode(stripslashes($_REQUEST['selection']));
         $imageWidth = $_REQUEST['width'];
         $imageHeight = $_REQUEST['height'];
 
-        $imagePath = $this->getImagePathFromUrl($post_id);
-        if (!is_null($imagePath)) {
-            $image = $this->createImage($imagePath);
-            if (!is_null($image)) {
-                $attachedFile = get_attached_file($post_id);
-                $this->saveCroppedImage($attachedFile, $previewSize, $selection, $imageWidth, $imageHeight);
-            }
+        if (!empty($postId)) {
+            $this->cropAndSaveImage($postId, $previewSize, $selection);
         }
 
         $return = array(
@@ -65,7 +79,6 @@ class CropShare
         wp_send_json($return);
 
         die();
-
     }
 
     /** PROTECTED methods **/
@@ -85,44 +98,63 @@ class CropShare
     }
 
     /**
-     * @param $image_url
-     * @return null|resource
+     * @param $postId
+     * @param $previewSize
+     * @param $selection
      */
-    protected function createImage($image_url)
+    protected function cropAndSaveImage($postId, $previewSize, $selection)
     {
-        $ext = pathinfo($image_url, PATHINFO_EXTENSION);
-        $image_path = $this->getImageFromUrl($image_url);
+        $originImage = get_attached_file($postId);
+        if ($this->useImageMagick) {
+            $this->cropWithImageMagick($originImage, $previewSize, $selection);
+        } else {
+            // Use WP to get original image dimensions
+            $originImageInfo = wp_get_attachment_image_src($postId, 'full');
+            if ($originImageInfo !== false) {
+                $image = $this->cropWithPhpCrop($originImage, $previewSize, $selection, $originImageInfo[1], $originImageInfo[2]);
+                if ($image !== false)
+                {
 
-        if (!file_exists($image_path)) {
-            return null;
+                }
+            }
         }
-        switch ($ext) {
-            case 'gif':
-                $image = imagecreatefromgif($image_path);
-                break;
-            case 'jpg':
-            case 'jpeg':
-                $image = imagecreatefromjpeg($image_path);
-                break;
-            case 'png':
-                $image = imagecreatefrompng($image_path);
-                break;
-            default:
-                return null;
-        }
-
-        return $image;
     }
 
     /**
-     * @param $post_id
-     * @return string|null
+     * @param $originImage
+     * @param $previewSize
+     * @param $selection
      */
-    protected function getImagePathFromUrl($post_id)
+    protected function cropWithImageMagick($originImage, $previewSize, $selection)
     {
-        $image_info = wp_get_attachment_image_src($post_id, '');
+        $image = new Imagick($originImage);
+        $originalDimensions = $image->getImageGeometry();
+        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originalDimensions['width'], $originalDimensions['height']);
+        $image->cropImage($scaledSelection->w, $scaledSelection->h, $scaledSelection->x, $scaledSelection->y);
 
-        return (is_array($image_info)) ? $image_info[0] : null;
+        $uploads = wp_upload_dir();
+        if (is_array($uploads)) {
+            $outFile = $uploads['basedir'] . '/this_really_worked.bmp';
+        }
+        $image->setImageFormat ('bmp');
+        $image->writeImage($outFile);
+    }
+
+    /**
+     * @param $originImage
+     * @param $previewSize
+     * @param $selection
+     * @param $originalWidth
+     * @param $originalHeight
+     * @return mixed
+     */
+    protected function cropWithPhpCrop($originImage, $previewSize, $selection, $originalWidth, $originalHeight)
+    {
+        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originalWidth, $originalHeight);
+        $phpCrop = new PHPCrop($originImage, $scaledSelection);
+        $image = $phpCrop->getCroppedImage();
+
+        return $image;
     }
 
     /**
@@ -147,135 +179,25 @@ class CropShare
         return $image_url;
     }
 
-    protected function getImageFromUrl($image_url)
+    /**
+     * @param $previewSize
+     * @param $selection
+     * @param $originalWidth
+     * @param $originalHeight
+     * @return \stdClass
+     */
+    protected function scaleSelection($previewSize, $selection, $originalWidth, $originalHeight)
     {
-        $file_path = null;
-        $parsed = parse_url($image_url);
-
-        $uploads = wp_upload_dir();
-
-        if (is_array($parsed) && is_array($uploads)) {
-            $parsed_parts = explode('/', $parsed['path']);
-            $upload_parts = explode('/', $uploads['basedir']);
-            $file_path = implode('/', array_diff($parsed_parts, $upload_parts));
-            $file_path = $uploads['basedir'] . '/' . $file_path;
-        }
-
-        return $file_path;
-    }
-
-    protected function saveCroppedImage($originImage, $previewSize, $selection, $originWidth, $originHeight)
-    {
-        $image = new Imagick($originImage);
-        $originalDimensions = $image->getImageGeometry();
-        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originalDimensions['width'], $originalDimensions['height']);
-        $image->cropImage($originWidth, $originHeight, $selection->x, $selection->y);
-
-        $uploads = wp_upload_dir();
-        if (is_array($uploads)) {
-            $outFile = $uploads['basedir'] . '/this_really_worked.bmp';
-        }
-        $image->setImageFormat ('bmp');
-        $image->writeImage($outFile);
-    }
-
-    protected function scaleSelection($previewSize, $selection, $originWidth, $originHeight)
-    {
-        $scaledSelection = new stdClass();
-        $scale = $previewSize->height / intval($originHeight);
+        $scaledSelection = new \stdClass();
+        $scaleWidth =  intval($originalWidth) / $previewSize->width;
+        $scaleHeight =  intval($originalHeight) / $previewSize->height;
+        $scaledSelection->x = $selection->x * $scaleWidth;
+        $scaledSelection->y = $selection->y * $scaleHeight;
+        $scaledSelection->width = $selection->w * $scaleWidth;
+        $scaledSelection->height = $selection->h * $scaleHeight;
 
         return $scaledSelection;
     }
-
-    protected function imageCreateFromBMP($p_sFile)
-    {
-        //    Load the image into a string
-        $file = fopen($p_sFile, "rb");
-        $read = fread($file, 10);
-        while (!feof($file) && ($read <> ""))
-            $read .= fread($file, 1024);
-
-        $temp = unpack("H*", $read);
-        $hex = $temp[1];
-        $header = substr($hex, 0, 108);
-
-        //    Process the header
-        //    Structure: http://www.fastgraph.com/help/bmp_header_format.html
-        if (substr($header, 0, 4) == "424d") {
-            //    Cut it in parts of 2 bytes
-            $header_parts = str_split($header, 2);
-
-            //    Get the width        4 bytes
-            $width = hexdec($header_parts[19] . $header_parts[18]);
-
-            //    Get the height        4 bytes
-            $height = hexdec($header_parts[23] . $header_parts[22]);
-
-            //    Unset the header params
-            unset($header_parts);
-        }
-
-        //    Define starting X and Y
-        $x = 0;
-        $y = 1;
-
-        //    Create newimage
-        $image = imagecreatetruecolor($width, $height);
-
-        //    Grab the body from the image
-        $body = substr($hex, 108);
-
-        //    Calculate if padding at the end-line is needed
-        //    Divided by two to keep overview.
-        //    1 byte = 2 HEX-chars
-        $body_size = (strlen($body) / 2);
-        $header_size = ($width * $height);
-
-        //    Use end-line padding? Only when needed
-        $usePadding = ($body_size > ($header_size * 3) + 4);
-
-        //    Using a for-loop with index-calculation instaid of str_split to avoid large memory consumption
-        //    Calculate the next DWORD-position in the body
-        for ($i = 0; $i < $body_size; $i += 3) {
-            //    Calculate line-ending and padding
-            if ($x >= $width) {
-                //    If padding needed, ignore image-padding
-                //    Shift i to the ending of the current 32-bit-block
-                if ($usePadding)
-                    $i += $width % 4;
-
-                //    Reset horizontal position
-                $x = 0;
-
-                //    Raise the height-position (bottom-up)
-                $y++;
-
-                //    Reached the image-height? Break the for-loop
-                if ($y > $height)
-                    break;
-            }
-
-            //    Calculation of the RGB-pixel (defined as BGR in image-data)
-            //    Define $i_pos as absolute position in the body
-            $i_pos = $i * 2;
-            $r = hexdec($body[$i_pos + 4] . $body[$i_pos + 5]);
-            $g = hexdec($body[$i_pos + 2] . $body[$i_pos + 3]);
-            $b = hexdec($body[$i_pos] . $body[$i_pos + 1]);
-
-            //    Calculate and draw the pixel
-            $color = imagecolorallocate($image, $r, $g, $b);
-            imagesetpixel($image, $x, $height - $y, $color);
-
-            //    Raise the horizontal position
-            $x++;
-        }
-
-        //    Unset the body / free the memory
-        unset($body);
-
-        //    Return image-object
-        return $image;
-    }
 }
-
+// Load as singleton to add actions and enqueue assets
 CropShare::register();
