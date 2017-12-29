@@ -9,9 +9,6 @@
  * Author URI: http://www.pemburnia.com/
 */
 
-require_once __DIR__ . '/phpcrop.php';
-//use Plugins\Cropshare\PHPCrop;
-
 class CropShare
 {
     protected $useImageMagick;
@@ -50,9 +47,16 @@ class CropShare
      */
     public function enqueueAssets()
     {
+        wp_enqueue_style( 'wp-jquery-ui-dialog' );
         wp_enqueue_style('fontawesome', 'https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
+        wp_enqueue_style('jquery-cropper', plugin_dir_url(__FILE__) . 'css/cropper.min.css');
         wp_enqueue_style('cropshare', plugin_dir_url(__FILE__) . 'css/cropshare.css');
-        wp_register_script('cropshare', plugin_dir_url(__FILE__) . 'js/cropshare.js', '', '1.2', true);
+
+        wp_enqueue_script('jquery-cropper', plugin_dir_url(__FILE__) . 'js/cropper.min.js');
+        wp_enqueue_script( 'jquery-ui-dialog' );
+        wp_register_script('dom-observer', plugin_dir_url(__FILE__) . 'js/dom_observer.js', '', '1.0', true);
+        wp_register_script('cropshare', plugin_dir_url(__FILE__) . 'js/cropshare.js', '', '1.0', true);
+        wp_enqueue_script('dom-observer');
         wp_enqueue_script('cropshare');
     }
 
@@ -62,19 +66,19 @@ class CropShare
     public function handleCropshareAjax()
     {
         $postId = $_REQUEST['post_id'];
-        $previewSize = (object) $_REQUEST['originalSize'];
-        $magnification = $_REQUEST['magnification'];
-        $selection = json_decode(stripslashes($_REQUEST['selection']));
-        $imageWidth = $_REQUEST['width'];
-        $imageHeight = $_REQUEST['height'];
+
+        $return = null;
 
         if (!empty($postId)) {
-            $this->cropAndSaveImage($postId, $previewSize, $selection);
+            $imageInfo = wp_get_attachment_image_src($postId, 'full');
+            $imageUrl = $imageInfo[0];
+            $originImage = get_attached_file($postId);
+            $ext = pathinfo($originImage, PATHINFO_EXTENSION);
+            $return = array(
+                'url' => $imageUrl,
+                'ext' => $ext
+            );
         }
-
-        $return = array(
-            'message' => 'Saved'
-        );
 
         wp_send_json($return);
 
@@ -98,66 +102,6 @@ class CropShare
     }
 
     /**
-     * @param $postId
-     * @param $previewSize
-     * @param $selection
-     */
-    protected function cropAndSaveImage($postId, $previewSize, $selection)
-    {
-        $originImage = get_attached_file($postId);
-        if ($this->useImageMagick) {
-            $this->cropWithImageMagick($originImage, $previewSize, $selection);
-        } else {
-            // Use WP to get original image dimensions
-            $originImageInfo = wp_get_attachment_image_src($postId, 'full');
-            if ($originImageInfo !== false) {
-                $image = $this->cropWithPhpCrop($originImage, $previewSize, $selection, $originImageInfo[1], $originImageInfo[2]);
-                if ($image !== false)
-                {
-
-                }
-            }
-        }
-    }
-
-    /**
-     * @param $originImage
-     * @param $previewSize
-     * @param $selection
-     */
-    protected function cropWithImageMagick($originImage, $previewSize, $selection)
-    {
-        $image = new Imagick($originImage);
-        $originalDimensions = $image->getImageGeometry();
-        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originalDimensions['width'], $originalDimensions['height']);
-        $image->cropImage($scaledSelection->w, $scaledSelection->h, $scaledSelection->x, $scaledSelection->y);
-
-        $uploads = wp_upload_dir();
-        if (is_array($uploads)) {
-            $outFile = $uploads['basedir'] . '/this_really_worked.bmp';
-        }
-        $image->setImageFormat ('bmp');
-        $image->writeImage($outFile);
-    }
-
-    /**
-     * @param $originImage
-     * @param $previewSize
-     * @param $selection
-     * @param $originalWidth
-     * @param $originalHeight
-     * @return mixed
-     */
-    protected function cropWithPhpCrop($originImage, $previewSize, $selection, $originalWidth, $originalHeight)
-    {
-        $scaledSelection = $this->scaleSelection($previewSize, $selection, $originalWidth, $originalHeight);
-        $phpCrop = new PHPCrop($originImage, $scaledSelection);
-        $image = $phpCrop->getCroppedImage();
-
-        return $image;
-    }
-
-    /**
      * @param $image
      * @return string|null
      */
@@ -177,26 +121,6 @@ class CropShare
         }
 
         return $image_url;
-    }
-
-    /**
-     * @param $previewSize
-     * @param $selection
-     * @param $originalWidth
-     * @param $originalHeight
-     * @return \stdClass
-     */
-    protected function scaleSelection($previewSize, $selection, $originalWidth, $originalHeight)
-    {
-        $scaledSelection = new \stdClass();
-        $scaleWidth =  intval($originalWidth) / $previewSize->width;
-        $scaleHeight =  intval($originalHeight) / $previewSize->height;
-        $scaledSelection->x = $selection->x * $scaleWidth;
-        $scaledSelection->y = $selection->y * $scaleHeight;
-        $scaledSelection->width = $selection->w * $scaleWidth;
-        $scaledSelection->height = $selection->h * $scaleHeight;
-
-        return $scaledSelection;
     }
 }
 // Load as singleton to add actions and enqueue assets

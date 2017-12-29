@@ -1,48 +1,4 @@
-var DOMObserver = {
-    done: false,
-    observer: null,
-    nodeAddedCallback: null,
-    nodeRemovedCallback: null,
-    onAddedClassName: '',
-    onRemovedClassName: '',
-    config: {
-        attributes: true,
-        childList: true,
-        characterData: true,
-        subtree: true
-    },
-    targetNode: document.body,
-    init: function(options) {
-        jQuery.extend(this, options);
-        this.observe()
-    },
-    observe: function() {
-        var self = this;
-        this.observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                var removedNodes = Array.from(mutation.removedNodes);
-                if (removedNodes.length > 0) {
-                    for (var index in removedNodes) {
-                        var node = removedNodes[index];
-                        if (node.className !== undefined) {
-                            if (node.className.indexOf(self.onRemovedClassName) !== -1) {
-                                self.nodeRemovedCallback();
-                                self.done = false;
-                            }
-                        }
-                    }
-                }
-                if (mutation.attributeName == 'class' && !self.done) {
-                    if (mutation.target.className.indexOf(self.onAddedClassName) !== -1) {
-                        self.nodeAddedCallback();
-                        self.done = true;
-                    }
-                }
-            });
-        });
-        this.observer.observe(this.targetNode, this.config);
-    }
-};
+/** cropshare.js */
 
 var CropShare = {
     selectListener: null,
@@ -52,39 +8,89 @@ var CropShare = {
         width: null,
         height: null
     },
+    imageExt: null,
     init: function(options) {
         jQuery.extend(this, options);
     },
     onLoaded: function() {
         this._createButtons();
+        this._createDialog();
         this.previewImage = jQuery('[id^=image-preview-]');
         this._getImageSize(this.previewImage);
-    },
-    _createButtons: function() {
-        // Add Plus, Minus, and Share buttons
-        jQuery('.imgedit-menu').append('<button type="button" id="cropshare_plus" class="button"><i class="cropshare-btn fa fa-plus-circle"></i><span class="screen-reader-text">Increase magnification</span></button>');
-        jQuery('.imgedit-menu').append('<button type="button" id="cropshare_minus" class="button"><i class="cropshare-btn fa fa-minus-circle"></i><span class="screen-reader-text">Decrease magnification</span></button>');
-        jQuery('.imgedit-menu').append('<button type="button" id="cropshare" class="button" disabled><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
         this._setListeners();
     },
-    _decreaseMagnification: function() {
-        this.magnification-=10;
-        this._setMagnification();
+    _createButtons: function() {
+        // Add Share button
+        jQuery('.imgedit-menu').append('<button type="button" id="cropshare" class="button"><i class="cropshare-btn fa fa-share-square-o"></i><span class="screen-reader-text">Crop and download</span></button>');
     },
-    _increaseMagnification: function() {
-        this.magnification+=10;
-        this._setMagnification();
+    _createCropper: function(url, ext) {
+        jQuery('#cropshare_filename').val('cropped.' + ext);
+        jQuery('#cropshare_link').attr('download', jQuery('#cropshare_filename').val());
+        jQuery('#cropshare_crop').attr('src', url);
+        jQuery('.media-modal, .media-modal-backdrop').hide();
+        jQuery('#crop_modal').dialog('open');
+        jQuery('#cropshare_crop').cropper({
+            aspectRatio: 1 / 1,
+            crop: function(e) {
+                var canvas = $('#cropshare_crop').cropper('getCroppedCanvas');
+                var canvas2 = $(this).cropper('getCroppedCanvas');
+                var data = canvas.toDataURL();
+                var url = data.replace(/^data:image\/[^;]+/, 'data:application/octet-stream');
+                var $link = $('#cropshare_link');
+                $link.attr('href', url);
+            }
+        });
+        jQuery('#cropshare_filename').off().on('change', function() {
+            $('#cropshare_link').attr('download', $(this).val());
+        });
     },
-    _setMagnification: function() {
-        this.previewImage.width(parseInt(this.imageSize.width + this.magnification));
-        //this.previewImage.css({ 'clip-path' : 'inset(' + this.magnification / 2 + 'px)' })
-    },
-    onSelected: function() {
+    _createDialog: function() {
+        // Append dialog body and download link
+        jQuery('.uploader-window').append('<div id="crop_modal" style="display:block;"><div><img id="cropshare_crop" src="" draggable="false"/></div></div>')
+        jQuery('#cropshare_crop').append('<a id="cropshare_link" href="" download=""/>')
+        // Define the dialog box
+        jQuery('#crop_modal').dialog({
+            title: 'Crop and Download',
+            dialogClass: 'wp-dialog',
+            autoOpen: false,
+            draggable: true,
+            width: 'auto',
+            modal: true,
+            resizable: false,
+            closeOnEscape: true,
+            position: {
+                my: "center",
+                at: "center",
+                of: window
+            },
+            close: function() {
+                // Destroy the cropper
+                jQuery('#cropshare_crop').cropper('destroy');
+                // Show the media modal and backdrop that we hid earlier
+                jQuery('.media-modal, .media-modal-backdrop').show();
+            },
+            create: function () {
+                // Style fix for WordPress admin
+                $('.ui-dialog-titlebar-close').addClass('ui-button');
+                $('.ui-dialog-buttonpane').append('<label for="">Cropped file name: <input id="cropshare_filename" type="text" value=""/></label>');
+            },
+            buttons: {
+                'Download': function(e) {
+                    var $link = $('#cropshare_link');
+                    // Must use the native click method to click anchor element
+                    $link[0].click();
+                },
+                'Close': function() {
+                    $(this).dialog('close');
+                }
+            }
+        })
     },
     onDone: function() {
         clearInterval(this.selectListener);
     },
     _doAjax: function() {
+        var self = this;
         var $imageEditor = jQuery('[id^=image-editor-]');
         var imageEditorId = $imageEditor.attr('id');
         var postId = imageEditorId.match(/\d+/g, '')[0];
@@ -105,7 +111,11 @@ var CropShare = {
              magnification: this.magnification
          },
          success: function(response) {
-             console.log(response);
+            if (response.url) {
+                self.imageExt = response.ext;
+                self._createCropper(response.url, response.ext);
+            }
+            console.log(response);
          },
          error: function(response) {
              console.log(response);
@@ -123,10 +133,8 @@ var CropShare = {
     },
     _listenForSelect: function() {
         var imageSelection = jQuery('[id^=imgedit-selection-]').val();
-        // Disable size buttons and enable share button
-        jQuery('#cropshare_plus').prop('disabled', (imageSelection != ''))
-        jQuery('#cropshare_minus').prop('disabled', (imageSelection != ''))
-        jQuery('#cropshare').prop('disabled', (imageSelection == ''))
+        // Disable share button when user has started the built-in cropping selection
+        jQuery('#cropshare').prop('disabled', (imageSelection !== ''))
     },
     _setListeners: function() {
         var self = this;
@@ -136,7 +144,7 @@ var CropShare = {
         jQuery('#cropshare_minus').off().on('click', function() {
             self._decreaseMagnification();
         })
-        jQuery('#cropshare').off().on('click', function() {
+        jQuery('#cropshare').off().on('click', function(e) {
             self._doAjax();
         })
         this.selectListener = setInterval(this._listenForSelect, 100);
