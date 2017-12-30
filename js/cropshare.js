@@ -46,7 +46,11 @@ var CropShare = {
     },
     _createDialog: function() {
         // Append dialog body and download link
-        jQuery('.uploader-window').append('<div id="crop_modal" style="display:block;"><div><img id="cropshare_crop" src="" draggable="false"/></div></div>')
+        if (jQuery('#cropshare_crop').is('*')) {
+            return;
+        }
+        jQuery('.uploader-window').append('<div id="crop_modal" style="display:block;"></div>')
+        jQuery('#crop_modal').append('<img id="cropshare_crop" src="" draggable="false"/>')
         jQuery('#cropshare_crop').append('<a id="cropshare_link" href="" download=""/>')
         // Define the dialog box
         jQuery('#crop_modal').dialog({

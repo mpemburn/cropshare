@@ -50,7 +50,7 @@ class CropShare
         wp_enqueue_style( 'wp-jquery-ui-dialog' );
         wp_enqueue_style('fontawesome', 'https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css');
         wp_enqueue_style('jquery-cropper', plugin_dir_url(__FILE__) . 'css/cropper.min.css');
-        wp_enqueue_style('cropshare', plugin_dir_url(__FILE__) . 'css/cropshare.css');
+        wp_enqueue_style('cropshare', plugin_dir_url(__FILE__) . 'css/cropshare.css', '', '1.0');
 
         wp_enqueue_script('jquery-cropper', plugin_dir_url(__FILE__) . 'js/cropper.min.js');
         wp_enqueue_script( 'jquery-ui-dialog' );
